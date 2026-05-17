@@ -25,5 +25,5 @@ export default defineConfig(({ mode }) => ({
       "@tanstack/query-core",
     ],
   },
-  base: "./",
+  base: "/text-comparer-app",
 }));
