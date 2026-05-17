@@ -1,7 +1,14 @@
-import { useMemo, useState, useEffect, useRef, forwardRef } from "react";
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  forwardRef,
+  useCallback,
+  type MutableRefObject,
+} from "react";
 import { diffLines, diffWordsWithSpace, Change } from "diff";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Pencil, Check, X } from "lucide-react";
 
 interface DiffViewerProps {
@@ -9,7 +16,6 @@ interface DiffViewerProps {
   right: string;
   mode: "line" | "word";
   scrollContainerRef?: React.Ref<HTMLDivElement>;
-  onApplyEdits?: (left: string, right: string) => void;
 }
 
 export interface AlignedRow {
@@ -32,7 +38,11 @@ export interface DiffChunk {
   size: number;
 }
 
-export function buildAlignedRows(left: string, right: string, mode: "line" | "word"): AlignedRow[] {
+export function buildAlignedRows(
+  left: string,
+  right: string,
+  mode: "line" | "word",
+): AlignedRow[] {
   const changes = diffLines(left, right);
   const rows: AlignedRow[] = [];
   let leftNum = 1;
@@ -63,7 +73,8 @@ export function buildAlignedRows(left: string, right: string, mode: "line" | "wo
           const r = removedLines[j];
           const a = addedLines[j];
           if (r !== undefined && a !== undefined) {
-            const inline = mode === "word" ? diffWordsWithSpace(r, a) : undefined;
+            const inline =
+              mode === "word" ? diffWordsWithSpace(r, a) : undefined;
             rows.push({
               leftType: "removed",
               rightType: "added",
@@ -150,7 +161,8 @@ export function buildChunks(rows: AlignedRow[]): DiffChunk[] {
     const type: DiffChunk["type"] =
       hasRemoved && hasAdded ? "modified" : hasAdded ? "added" : "removed";
     const preview =
-      (first.rightContent || first.leftContent || "").trim().slice(0, 60) || "(empty line)";
+      (first.rightContent || first.leftContent || "").trim().slice(0, 60) ||
+      "(empty line)";
     chunks.push({
       index: start,
       type,
@@ -163,8 +175,18 @@ export function buildChunks(rows: AlignedRow[]): DiffChunk[] {
   return chunks;
 }
 
-function renderInline(content: string, parts: Change[] | undefined, side: "left" | "right") {
-  if (!parts) return content || "\u00A0";
+function renderInline(
+  content: string,
+  parts: Change[] | undefined,
+  side: "left" | "right",
+  ghost = false,
+) {
+  if (!parts)
+    return (
+      <span className={ghost ? "text-transparent" : undefined}>
+        {content || "\u00A0"}
+      </span>
+    );
   return (
     <>
       {parts.map((p, idx) => {
@@ -176,15 +198,19 @@ function renderInline(content: string, parts: Change[] | undefined, side: "left"
               key={idx}
               className={
                 side === "left"
-                  ? "bg-[hsl(var(--diff-removed-marker)/0.35)] rounded px-0.5"
-                  : "bg-[hsl(var(--diff-added-marker)/0.35)] rounded px-0.5"
+                  ? `bg-[hsl(var(--diff-removed-marker)/0.35)] rounded px-0.5 ${ghost ? "text-transparent" : ""}`
+                  : `bg-[hsl(var(--diff-added-marker)/0.35)] rounded px-0.5 ${ghost ? "text-transparent" : ""}`
               }
             >
               {p.value}
             </span>
           );
         }
-        return <span key={idx}>{p.value}</span>;
+        return (
+          <span key={idx} className={ghost ? "text-transparent" : undefined}>
+            {p.value}
+          </span>
+        );
       })}
     </>
   );
@@ -192,13 +218,30 @@ function renderInline(content: string, parts: Change[] | undefined, side: "left"
 
 export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
   ({ left, right, mode, scrollContainerRef, onApplyEdits }, _ref) => {
-    const rows = useMemo(() => buildAlignedRows(left, right, mode), [left, right, mode]);
+    const rows = useMemo(
+      () => buildAlignedRows(left, right, mode),
+      [left, right, mode],
+    );
     const [editing, setEditing] = useState<"left" | "right" | null>(null);
     const [editLeft, setEditLeft] = useState(left);
     const [editRight, setEditRight] = useState(right);
+    const diffContainerRef = useRef<HTMLDivElement>(null);
     const editAreaRef = useRef<HTMLTextAreaElement>(null);
-    const previewRef = useRef<HTMLDivElement>(null);
+    const editHighlightRef = useRef<HTMLDivElement>(null);
+    const leftPaneRef = useRef<HTMLDivElement>(null);
+    const rightPaneRef = useRef<HTMLDivElement>(null);
     const syncingRef = useRef<"editor" | "preview" | null>(null);
+    const setScrollRefs = useCallback(
+      (node: HTMLDivElement | null) => {
+        diffContainerRef.current = node;
+        if (typeof scrollContainerRef === "function") scrollContainerRef(node);
+        else if (scrollContainerRef)
+          (
+            scrollContainerRef as MutableRefObject<HTMLDivElement | null>
+          ).current = node;
+      },
+      [scrollContainerRef],
+    );
 
     useEffect(() => {
       if (editing !== "left") setEditLeft(left);
@@ -218,17 +261,37 @@ export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
     };
 
     const applyEdit = () => {
+      const editedPane = diffContainerRef.current;
+      const editedLines = editedPane
+        ? Array.from(
+            editedPane.querySelectorAll<HTMLElement>("[data-edit-line]"),
+          ).map((line) => line.innerText.replace(/\n$/, ""))
+        : [];
+      const editedText =
+        editedLines.length > 0
+          ? editedLines.join("\n")
+          : editing === "left"
+            ? editLeft
+            : editRight;
       onApplyEdits?.(
-        editing === "left" ? editLeft : left,
-        editing === "right" ? editRight : right,
+        editing === "left" ? editedText : left,
+        editing === "right" ? editedText : right,
       );
       setEditing(null);
     };
 
     const handleEditorScroll = () => {
-      if (syncingRef.current === "preview") { syncingRef.current = null; return; }
-      const ed = editAreaRef.current; const pv = previewRef.current;
-      if (!ed || !pv) return;
+      if (syncingRef.current === "preview") {
+        syncingRef.current = null;
+        return;
+      }
+      const ed = editAreaRef.current;
+      const pv =
+        editing === "left" ? rightPaneRef.current : leftPaneRef.current;
+      if (!ed) return;
+      if (editHighlightRef.current)
+        editHighlightRef.current.scrollTop = ed.scrollTop;
+      if (!pv) return;
       const max = ed.scrollHeight - ed.clientHeight;
       const ratio = max > 0 ? ed.scrollTop / max : 0;
       syncingRef.current = "editor";
@@ -236,13 +299,20 @@ export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
     };
 
     const handlePreviewScroll = () => {
-      if (syncingRef.current === "editor") { syncingRef.current = null; return; }
-      const ed = editAreaRef.current; const pv = previewRef.current;
+      if (syncingRef.current === "editor") {
+        syncingRef.current = null;
+        return;
+      }
+      const ed = editAreaRef.current;
+      const pv =
+        editing === "left" ? rightPaneRef.current : leftPaneRef.current;
       if (!ed || !pv) return;
       const max = pv.scrollHeight - pv.clientHeight;
       const ratio = max > 0 ? pv.scrollTop / max : 0;
       syncingRef.current = "preview";
       ed.scrollTop = ratio * (ed.scrollHeight - ed.clientHeight);
+      if (editHighlightRef.current)
+        editHighlightRef.current.scrollTop = ed.scrollTop;
     };
 
     const stats = useMemo(() => {
@@ -260,7 +330,9 @@ export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
       return (
         <div className="rounded-2xl border border-border bg-card p-12 text-center text-muted-foreground shadow-[var(--shadow-card)]">
           <p className="text-sm">
-            Paste text on both sides and click <span className="font-medium text-foreground">Compare</span> to see the differences.
+            Paste text on both sides and click{" "}
+            <span className="font-medium text-foreground">Compare</span> to see
+            the differences.
           </p>
         </div>
       );
@@ -281,20 +353,38 @@ export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
           </div>
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
             <span className="h-2 w-2 rounded-full bg-muted-foreground/50" />
-            <span className="font-medium text-foreground">{stats.unchanged}</span>
+            <span className="font-medium text-foreground">
+              {stats.unchanged}
+            </span>
             <span className="text-muted-foreground">unchanged</span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-2">
             {editing ? (
               <>
                 <span className="text-[11px] text-muted-foreground">
-                  Editing <span className="font-medium text-foreground">{editing === "left" ? "Original" : "Changed"}</span>
+                  Editing{" "}
+                  <span className="font-medium text-foreground">
+                    {editing === "left" ? "Original" : "Changed"}
+                  </span>
                 </span>
-                <Button size="sm" variant="outline" className="h-8 rounded-full" onClick={cancelEdit}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 rounded-full"
+                  onClick={cancelEdit}
+                >
                   <X className="mr-1 h-3.5 w-3.5" /> Cancel
                 </Button>
-                <Button size="sm" className="h-8 rounded-full" onClick={applyEdit}>
-                  <Check className="mr-1 h-3.5 w-3.5" /> Apply &amp; re-compare
+                <Button
+                  size="sm"
+                  className="h-8 rounded-full"
+                  onClick={applyEdit}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">
+                    Apply &amp; re-compare
+                  </span>
+                  <span className="sm:hidden">Apply</span>
                 </Button>
               </>
             ) : (
@@ -323,180 +413,183 @@ export const DiffViewer = forwardRef<HTMLDivElement, DiffViewerProps>(
           <div className="grid grid-cols-2 border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             <div className="flex items-center justify-between border-r border-border px-4 py-2.5">
               <span>Original</span>
-              {editing === "left" && <span className="normal-case tracking-normal text-[10px] text-primary">editing</span>}
+              {editing === "left" && (
+                <span className="normal-case tracking-normal text-[10px] text-primary">
+                  editing
+                </span>
+              )}
             </div>
             <div className="flex items-center justify-between px-4 py-2.5">
               <span>Changed</span>
-              {editing === "right" && <span className="normal-case tracking-normal text-[10px] text-primary">editing</span>}
+              {editing === "right" && (
+                <span className="normal-case tracking-normal text-[10px] text-primary">
+                  editing
+                </span>
+              )}
             </div>
           </div>
 
           {editing ? (
-            <div className="grid grid-cols-2">
-              {/* LEFT column */}
-              {editing === "left" ? (
-                <div className="relative border-r border-border bg-[hsl(var(--diff-removed-bg)/0.4)]">
-                  <textarea
-                    ref={editAreaRef}
-                    value={editLeft}
-                    onChange={(e) => setEditLeft(e.target.value)}
-                    onScroll={handleEditorScroll}
-                    spellCheck={false}
-                    autoFocus
-                    className="block h-[60vh] w-full resize-none border-0 bg-transparent pl-14 pr-3 py-1 font-mono text-[13px] leading-relaxed text-foreground outline-none focus:outline-none focus:ring-0"
-                  />
-                  <div className="pointer-events-none absolute inset-y-0 left-0 w-12 select-none border-r border-border/60 bg-muted/20" />
-                </div>
-              ) : (
-                <div
-                  ref={previewRef}
-                  onScroll={handlePreviewScroll}
-                  className="h-[60vh] overflow-auto font-mono text-[13px] leading-relaxed border-r border-border"
-                >
-                  {rows.map((row, i) => (
-                    <div
-                      key={i}
-                      className={`flex ${
+            <div
+              ref={setScrollRefs}
+              className="max-h-[60vh] overflow-auto font-mono text-[13px] leading-relaxed"
+            >
+              {rows.map((row, i) => (
+                <div key={i} data-diff-row={i} className="grid grid-cols-2">
+                  <div
+                    ref={editing === "left" ? leftPaneRef : undefined}
+                    className={`flex border-r border-border ${
+                      row.leftType === "removed"
+                        ? "bg-[hsl(var(--diff-removed-bg))]"
+                        : row.leftType === "empty"
+                          ? "bg-muted/30"
+                          : ""
+                    }`}
+                  >
+                    <div className="w-8 sm:w-12 shrink-0 select-none border-r border-border/60 px-1 sm:px-2 py-1 text-right text-[10px] sm:text-xs text-muted-foreground/70">
+                      {row.leftNum ?? ""}
+                    </div>
+                    <pre
+                      contentEditable={
+                        editing === "left" && row.leftNum !== null
+                      }
+                      data-edit-line={
+                        editing === "left" && row.leftNum !== null
+                          ? true
+                          : undefined
+                      }
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      className={`flex-1 whitespace-pre-wrap break-words px-2 sm:px-3 py-1 outline-none ${
+                        editing === "left" && row.leftNum !== null
+                          ? "cursor-text ring-inset focus:bg-background/50 focus:ring-1 focus:ring-primary/50"
+                          : ""
+                      } ${
                         row.leftType === "removed"
-                          ? "bg-[hsl(var(--diff-removed-bg))]"
-                          : row.leftType === "empty"
-                          ? "bg-muted/30"
-                          : ""
+                          ? "text-[hsl(var(--diff-removed-text))]"
+                          : "text-[hsl(var(--diff-unchanged))]"
                       }`}
                     >
-                      <div className="w-12 shrink-0 select-none border-r border-border/60 px-2 py-1 text-right text-xs text-muted-foreground/70">
-                        {row.leftNum ?? ""}
-                      </div>
-                      <pre
-                        className={`flex-1 whitespace-pre-wrap break-words px-3 py-1 ${
-                          row.leftType === "removed"
-                            ? "text-[hsl(var(--diff-removed-text))]"
-                            : "text-[hsl(var(--diff-unchanged))]"
-                        }`}
-                      >
-                        {row.leftType === "removed" && mode === "word"
-                          ? renderInline(row.leftContent, row.leftInline, "left")
-                          : row.leftContent || "\u00A0"}
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      {row.leftType === "removed" && mode === "word"
+                        ? renderInline(row.leftContent, row.leftInline, "left")
+                        : row.leftContent || "\u00A0"}
+                    </pre>
+                  </div>
 
-              {/* RIGHT column */}
-              {editing === "right" ? (
-                <div className="relative bg-[hsl(var(--diff-added-bg)/0.4)]">
-                  <textarea
-                    ref={editAreaRef}
-                    value={editRight}
-                    onChange={(e) => setEditRight(e.target.value)}
-                    onScroll={handleEditorScroll}
-                    spellCheck={false}
-                    autoFocus
-                    className="block h-[60vh] w-full resize-none border-0 bg-transparent pl-14 pr-3 py-1 font-mono text-[13px] leading-relaxed text-foreground outline-none focus:outline-none focus:ring-0"
-                  />
-                  <div className="pointer-events-none absolute inset-y-0 left-0 w-12 select-none border-r border-border/60 bg-muted/20" />
-                </div>
-              ) : (
-                <div
-                  ref={previewRef}
-                  onScroll={handlePreviewScroll}
-                  className="h-[60vh] overflow-auto font-mono text-[13px] leading-relaxed"
-                >
-                  {rows.map((row, i) => (
-                    <div
-                      key={i}
-                      className={`flex ${
-                        row.rightType === "added"
-                          ? "bg-[hsl(var(--diff-added-bg))]"
-                          : row.rightType === "empty"
+                  <div
+                    ref={editing === "right" ? rightPaneRef : undefined}
+                    className={`flex ${
+                      row.rightType === "added"
+                        ? "bg-[hsl(var(--diff-added-bg))]"
+                        : row.rightType === "empty"
                           ? "bg-muted/30"
                           : ""
+                    }`}
+                  >
+                    <div className="w-8 sm:w-12 shrink-0 select-none border-r border-border/60 px-1 sm:px-2 py-1 text-right text-[10px] sm:text-xs text-muted-foreground/70">
+                      {row.rightNum ?? ""}
+                    </div>
+                    <pre
+                      contentEditable={
+                        editing === "right" && row.rightNum !== null
+                      }
+                      data-edit-line={
+                        editing === "right" && row.rightNum !== null
+                          ? true
+                          : undefined
+                      }
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      className={`flex-1 whitespace-pre-wrap break-words px-2 sm:px-3 py-1 outline-none ${
+                        editing === "right" && row.rightNum !== null
+                          ? "cursor-text ring-inset focus:bg-background/50 focus:ring-1 focus:ring-primary/50"
+                          : ""
+                      } ${
+                        row.rightType === "added"
+                          ? "text-[hsl(var(--diff-added-text))]"
+                          : "text-[hsl(var(--diff-unchanged))]"
                       }`}
                     >
-                      <div className="w-12 shrink-0 select-none border-r border-border/60 px-2 py-1 text-right text-xs text-muted-foreground/70">
-                        {row.rightNum ?? ""}
-                      </div>
-                      <pre
-                        className={`flex-1 whitespace-pre-wrap break-words px-3 py-1 ${
-                          row.rightType === "added"
-                            ? "text-[hsl(var(--diff-added-text))]"
-                            : "text-[hsl(var(--diff-unchanged))]"
-                        }`}
-                      >
-                        {row.rightType === "added" && mode === "word"
-                          ? renderInline(row.rightContent, row.rightInline, "right")
-                          : row.rightContent || "\u00A0"}
-                      </pre>
-                    </div>
-                  ))}
+                      {row.rightType === "added" && mode === "word"
+                        ? renderInline(
+                            row.rightContent,
+                            row.rightInline,
+                            "right",
+                          )
+                        : row.rightContent || "\u00A0"}
+                    </pre>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           ) : (
-          <div
-            ref={scrollContainerRef}
-            className="max-h-[60vh] overflow-auto font-mono text-[13px] leading-relaxed"
-          >
-            {rows.map((row, i) => (
-              <div key={i} data-diff-row={i} className="grid grid-cols-2">
-                <div
-                  className={`flex border-r border-border ${
-                    row.leftType === "removed"
-                      ? "bg-[hsl(var(--diff-removed-bg))]"
-                      : row.leftType === "empty"
-                      ? "bg-muted/30"
-                      : ""
-                  }`}
-                >
-                  <div className="w-12 shrink-0 select-none border-r border-border/60 px-2 py-1 text-right text-xs text-muted-foreground/70">
-                    {row.leftNum ?? ""}
-                  </div>
-                  <pre
-                    className={`flex-1 whitespace-pre-wrap break-words px-3 py-1 ${
+            <div
+              ref={setScrollRefs}
+              className="max-h-[60vh] overflow-auto font-mono text-[13px] leading-relaxed"
+            >
+              {rows.map((row, i) => (
+                <div key={i} data-diff-row={i} className="grid grid-cols-2">
+                  <div
+                    className={`flex border-r border-border ${
                       row.leftType === "removed"
-                        ? "text-[hsl(var(--diff-removed-text))]"
-                        : "text-[hsl(var(--diff-unchanged))]"
+                        ? "bg-[hsl(var(--diff-removed-bg))]"
+                        : row.leftType === "empty"
+                          ? "bg-muted/30"
+                          : ""
                     }`}
                   >
-                    {row.leftType === "removed" && mode === "word"
-                      ? renderInline(row.leftContent, row.leftInline, "left")
-                      : row.leftContent || "\u00A0"}
-                  </pre>
-                </div>
-
-                <div
-                  className={`flex ${
-                    row.rightType === "added"
-                      ? "bg-[hsl(var(--diff-added-bg))]"
-                      : row.rightType === "empty"
-                      ? "bg-muted/30"
-                      : ""
-                  }`}
-                >
-                  <div className="w-12 shrink-0 select-none border-r border-border/60 px-2 py-1 text-right text-xs text-muted-foreground/70">
-                    {row.rightNum ?? ""}
+                    <div className="w-8 sm:w-12 shrink-0 select-none border-r border-border/60 px-1 sm:px-2 py-1 text-right text-[10px] sm:text-xs text-muted-foreground/70">
+                      {row.leftNum ?? ""}
+                    </div>
+                    <pre
+                      className={`flex-1 whitespace-pre-wrap break-words px-2 sm:px-3 py-1 ${
+                        row.leftType === "removed"
+                          ? "text-[hsl(var(--diff-removed-text))]"
+                          : "text-[hsl(var(--diff-unchanged))]"
+                      }`}
+                    >
+                      {row.leftType === "removed" && mode === "word"
+                        ? renderInline(row.leftContent, row.leftInline, "left")
+                        : row.leftContent || "\u00A0"}
+                    </pre>
                   </div>
-                  <pre
-                    className={`flex-1 whitespace-pre-wrap break-words px-3 py-1 ${
+
+                  <div
+                    className={`flex ${
                       row.rightType === "added"
-                        ? "text-[hsl(var(--diff-added-text))]"
-                        : "text-[hsl(var(--diff-unchanged))]"
+                        ? "bg-[hsl(var(--diff-added-bg))]"
+                        : row.rightType === "empty"
+                          ? "bg-muted/30"
+                          : ""
                     }`}
                   >
-                    {row.rightType === "added" && mode === "word"
-                      ? renderInline(row.rightContent, row.rightInline, "right")
-                      : row.rightContent || "\u00A0"}
-                  </pre>
+                    <div className="w-8 sm:w-12 shrink-0 select-none border-r border-border/60 px-1 sm:px-2 py-1 text-right text-[10px] sm:text-xs text-muted-foreground/70">
+                      {row.rightNum ?? ""}
+                    </div>
+                    <pre
+                      className={`flex-1 whitespace-pre-wrap break-words px-2 sm:px-3 py-1 ${
+                        row.rightType === "added"
+                          ? "text-[hsl(var(--diff-added-text))]"
+                          : "text-[hsl(var(--diff-unchanged))]"
+                      }`}
+                    >
+                      {row.rightType === "added" && mode === "word"
+                        ? renderInline(
+                            row.rightContent,
+                            row.rightInline,
+                            "right",
+                          )
+                        : row.rightContent || "\u00A0"}
+                    </pre>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
     );
-  }
+  },
 );
 
 DiffViewer.displayName = "DiffViewer";
