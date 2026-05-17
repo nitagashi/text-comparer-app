@@ -20,7 +20,9 @@ Bright vixens jump; dozy fowl quack.`;
 const Index = () => {
   const [left, setLeft] = useState("");
   const [right, setRight] = useState("");
-  const [compared, setCompared] = useState<{ l: string; r: string } | null>(null);
+  const [compared, setCompared] = useState<{ l: string; r: string } | null>(
+    null,
+  );
   const [mode, setMode] = useState<"line" | "word">("word");
   const diffScrollRef = useRef<HTMLDivElement>(null);
 
@@ -44,39 +46,82 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border bg-card/60 backdrop-blur">
-        <div className="container mx-auto flex flex-wrap items-center justify-between gap-4 py-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[var(--shadow-soft)]">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:py-5">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[var(--shadow-soft)]">
               <GitCompare className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-foreground">Diffly</h1>
-              <p className="text-xs text-muted-foreground">Compare two texts and spot every difference</p>
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
+                Diffly
+              </h1>
+              <p className="hidden sm:block text-xs text-muted-foreground">
+                Compare two texts and spot every difference
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={loadSample}>Load sample</Button>
-            <Button variant="ghost" size="sm" onClick={handleClear}>
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadSample}
+              className="hidden sm:inline-flex"
+            >
+              Load sample
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadSample}
+              className="sm:hidden h-8 px-2 text-xs"
+            >
+              Sample
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleClear}
+              className="h-8 px-2 sm:px-3"
+            >
+              <RotateCcw className="h-3.5 w-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">Reset</span>
             </Button>
             <ThemeToggle />
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto py-8">
+      <main className="container mx-auto px-4 py-6 sm:py-8">
         <div className="grid gap-4 md:grid-cols-2">
-          <TextPanel label="Original text" value={left} onChange={setLeft} accent="left" />
-          <TextPanel label="Changed text" value={right} onChange={setRight} accent="right" />
+          <TextPanel
+            label="Original text"
+            value={left}
+            onChange={setLeft}
+            accent="left"
+          />
+          <TextPanel
+            label="Changed text"
+            value={right}
+            onChange={setRight}
+            accent="right"
+          />
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
-            <span className="font-medium text-foreground">{left.trim() ? left.trim().split(/\s+/).length.toLocaleString() : 0}</span>
+            <span className="font-medium text-foreground">
+              {left.trim()
+                ? left.trim().split(/\s+/).length.toLocaleString()
+                : 0}
+            </span>
             <span>words</span>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">
-            <span className="font-medium text-foreground">{right.trim() ? right.trim().split(/\s+/).length.toLocaleString() : 0}</span>
+            <span className="font-medium text-foreground">
+              {right.trim()
+                ? right.trim().split(/\s+/).length.toLocaleString()
+                : 0}
+            </span>
             <span>words</span>
           </div>
         </div>
@@ -86,7 +131,9 @@ const Index = () => {
             <button
               onClick={() => setMode("word")}
               className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-                mode === "word" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                mode === "word"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Word level
@@ -94,17 +141,28 @@ const Index = () => {
             <button
               onClick={() => setMode("line")}
               className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-                mode === "line" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                mode === "line"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               Line level
             </button>
           </div>
-          <Button onClick={handleCompare} size="lg" className="rounded-full px-8 shadow-[var(--shadow-soft)]">
+          <Button
+            onClick={handleCompare}
+            size="lg"
+            className="rounded-full px-6 sm:px-8 shadow-[var(--shadow-soft)]"
+          >
             <GitCompare className="mr-2 h-4 w-4" />
             Compare
           </Button>
-          <Button onClick={handleSwap} variant="outline" size="lg" className="rounded-full">
+          <Button
+            onClick={handleSwap}
+            variant="outline"
+            size="lg"
+            className="rounded-full px-5 sm:px-6"
+          >
             <ArrowLeftRight className="mr-2 h-4 w-4" />
             Swap
           </Button>

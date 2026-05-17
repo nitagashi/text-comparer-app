@@ -1,6 +1,13 @@
 import { useMemo, useState, useCallback } from "react";
 import { buildAlignedRows, buildChunks, DiffChunk } from "./DiffViewer";
-import { Plus, Minus, Pencil, ListTree, ChevronUp, ChevronDown } from "lucide-react";
+import {
+  Plus,
+  Minus,
+  Pencil,
+  ListTree,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 
 interface DiffNavigatorProps {
   left: string;
@@ -9,7 +16,10 @@ interface DiffNavigatorProps {
   scrollContainerRef: React.RefObject<HTMLDivElement>;
 }
 
-const typeStyles: Record<DiffChunk["type"], { icon: typeof Plus; label: string; dot: string; text: string }> = {
+const typeStyles: Record<
+  DiffChunk["type"],
+  { icon: typeof Plus; label: string; dot: string; text: string }
+> = {
   added: {
     icon: Plus,
     label: "Added",
@@ -30,7 +40,12 @@ const typeStyles: Record<DiffChunk["type"], { icon: typeof Plus; label: string; 
   },
 };
 
-export const DiffNavigator = ({ left, right, mode, scrollContainerRef }: DiffNavigatorProps) => {
+export const DiffNavigator = ({
+  left,
+  right,
+  mode,
+  scrollContainerRef,
+}: DiffNavigatorProps) => {
   const chunks = useMemo(() => {
     if (!left && !right) return [];
     const rows = buildAlignedRows(left, right, mode);
@@ -39,19 +54,45 @@ export const DiffNavigator = ({ left, right, mode, scrollContainerRef }: DiffNav
 
   const [activeIndex, setActiveIndex] = useState<number>(-1);
 
-  const jumpTo = useCallback((rowIndex: number, idx?: number) => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    const target = container.querySelector<HTMLElement>(`[data-diff-row="${rowIndex}"]`);
-    if (!target) return;
-    const top = target.offsetTop - 8;
-    container.scrollTo({ top, behavior: "smooth" });
-    target.classList.add("ring-2", "ring-primary", "ring-inset");
-    setTimeout(() => {
-      target.classList.remove("ring-2", "ring-primary", "ring-inset");
-    }, 1200);
-    if (typeof idx === "number") setActiveIndex(idx);
-  }, [scrollContainerRef]);
+  const jumpTo = useCallback(
+    (rowIndex: number, idx?: number) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(
+        `[data-diff-row="${rowIndex}"]`,
+      );
+      if (!target) return;
+      const performScroll = () => {
+        const cRect = container.getBoundingClientRect();
+        const tRect = target.getBoundingClientRect();
+        const top = Math.max(
+          0,
+          tRect.top - cRect.top + container.scrollTop - 12,
+        );
+        container.scrollTo({ top, behavior: "smooth" });
+      };
+
+      const containerRect = container.getBoundingClientRect();
+      const viewportH =
+        window.innerHeight || document.documentElement.clientHeight;
+      if (containerRect.top < 0 || containerRect.top > viewportH * 0.6) {
+        window.scrollTo({
+          top: window.scrollY + containerRect.top - 80,
+          behavior: "smooth",
+        });
+        setTimeout(performScroll, 350);
+      } else {
+        performScroll();
+      }
+
+      target.classList.add("ring-2", "ring-primary", "ring-inset");
+      setTimeout(() => {
+        target.classList.remove("ring-2", "ring-primary", "ring-inset");
+      }, 1200);
+      if (typeof idx === "number") setActiveIndex(idx);
+    },
+    [scrollContainerRef],
+  );
 
   const goNext = useCallback(() => {
     if (chunks.length === 0) return;
@@ -101,7 +142,9 @@ export const DiffNavigator = ({ left, right, mode, scrollContainerRef }: DiffNav
 
       {chunks.length === 0 ? (
         <div className="p-6 text-center text-xs text-muted-foreground">
-          {!left && !right ? "Run a comparison to see differences." : "No differences found."}
+          {!left && !right
+            ? "Run a comparison to see differences."
+            : "No differences found."}
         </div>
       ) : (
         <ul className="max-h-[60vh] overflow-auto divide-y divide-border">
@@ -117,24 +160,36 @@ export const DiffNavigator = ({ left, right, mode, scrollContainerRef }: DiffNav
                     isActive ? "bg-primary/5" : "hover:bg-muted/50"
                   }`}
                 >
-                  <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
-                    isActive ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-background"
-                  }`}>
+                  <span
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground group-hover:bg-background"
+                    }`}
+                  >
                     {idx + 1}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-[11px]">
-                      <span className={`inline-flex h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+                      <span
+                        className={`inline-flex h-1.5 w-1.5 rounded-full ${meta.dot}`}
+                      />
                       <Icon className="h-3 w-3 text-muted-foreground" />
-                      <span className="font-medium text-foreground">{meta.label}</span>
+                      <span className="font-medium text-foreground">
+                        {meta.label}
+                      </span>
                       <span className="text-muted-foreground">
                         · L{chunk.leftNum ?? "—"} / R{chunk.rightNum ?? "—"}
                       </span>
                       {chunk.size > 1 && (
-                        <span className="ml-auto text-muted-foreground">{chunk.size} lines</span>
+                        <span className="ml-auto text-muted-foreground">
+                          {chunk.size} lines
+                        </span>
                       )}
                     </div>
-                    <p className={`mt-1 truncate font-mono text-xs ${meta.text}`}>
+                    <p
+                      className={`mt-1 truncate font-mono text-xs ${meta.text}`}
+                    >
                       {chunk.preview}
                     </p>
                   </div>
