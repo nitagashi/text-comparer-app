@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main # Trigger deployment when pushing to main branch
+
+# Allow this job to modify the gh-pages branch
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Use Node.js 20 (LTS)
+          cache: "npm" # Cache npm dependencies for faster builds
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm ci # Uses package-lock.json for consistent installs
+
+      # Build the app
+      - name: Build app
+        run: npm run build # This will create the 'dist' folder
+
+      # Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist # The folder to deploy
+          publish_branch: gh-pages # The branch to deploy to
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_message: "Deploy from ${{ github.sha }}"
