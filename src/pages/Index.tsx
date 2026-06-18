@@ -53,7 +53,7 @@ const Index = () => {
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-                Diffly
+                Syntext
               </h1>
               <p className="hidden sm:block text-xs text-muted-foreground">
                 Compare two texts and spot every difference
